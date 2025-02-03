@@ -1,4 +1,4 @@
-module MyLib (vasicek) where
+module MyLib (vasicek, cir) where
 
 import Control.Monad (replicateM)
 import Data.Random (RVar, normal)
@@ -11,18 +11,28 @@ type Variance = Float
 
 type TimeStep = Float
 
-ornsteinUhlenbeckStep :: MeanReversion -> Mean -> Variance -> TimeStep -> Float -> Float -> Float
-ornsteinUhlenbeckStep theta mu sigma dt x_prev z = x_prev + drift + noise
+-- https://en.wikipedia.org/wiki/Ornstein%E2%80%93Uhlenbeck_process
+ornsteinUhlenbeck :: Float -> (Float -> Float -> Float) -> Int -> RVar [Float]
+ornsteinUhlenbeck x f number_of_steps = do
+  zs <- replicateM number_of_steps (normal 0 1)
+  pure $ scanl f x zs
+
+vasicekStep :: MeanReversion -> Mean -> Variance -> TimeStep -> Float -> Float -> Float
+vasicekStep theta mu sigma dt x_prev z = x_prev + drift + noise
   where
     drift = theta * (mu - x_prev) * dt
-    noise = sigma * z
-
--- https://en.wikipedia.org/wiki/Ornstein%E2%80%93Uhlenbeck_process
-ornsteinUhlenbeck :: Float -> MeanReversion -> Mean -> Variance -> TimeStep -> Int -> RVar [Float]
-ornsteinUhlenbeck x theta mu sigma dt number_of_steps = do
-  zs <- replicateM number_of_steps (normal 0 1)
-  pure $ scanl (ornsteinUhlenbeckStep theta mu sigma dt) x zs
+    noise = sigma * sqrt dt * z
 
 -- https://en.wikipedia.org/wiki/Vasicek_model
 vasicek :: Float -> MeanReversion -> Mean -> Variance -> TimeStep -> Int -> RVar [Float]
-vasicek x theta mu sigma dt = ornsteinUhlenbeck x theta mu (sigma * sqrt dt) dt
+vasicek r b a sigma dt = ornsteinUhlenbeck r (vasicekStep b a sigma dt)
+
+cirStep :: MeanReversion -> Mean -> Variance -> TimeStep -> Float -> Float -> Float
+cirStep b a sigma dt r_prev z = r_prev + drift + noise
+  where
+    drift = b * (a - r_prev) * dt
+    noise = sigma * sqrt (dt * r_prev) * z
+
+-- https://en.wikipedia.org/wiki/Vasicek_model
+cir :: Float -> MeanReversion -> Mean -> Variance -> TimeStep -> Int -> RVar [Float]
+cir r b a sigma dt = ornsteinUhlenbeck r (cirStep b a sigma dt)
