@@ -1,15 +1,17 @@
-module MyLib (vasicek, cir) where
+module MyLib (vasicek, cir, OrnstienUhlenbeck (..)) where
 
 import Control.Monad (replicateM)
 import Data.Random (RVar, normal)
 
-type Mean = Float
-
-type MeanReversion = Float
-
-type Variance = Float
+type Initial = Float
 
 type TimeStep = Float
+
+data OrnstienUhlenbeck = OrnstienUhlenbeck
+  { theta :: Float,
+    mu :: Float,
+    sigma :: Float
+  }
 
 -- https://en.wikipedia.org/wiki/Ornstein%E2%80%93Uhlenbeck_process
 ornsteinUhlenbeck :: Float -> (Float -> Float -> Float) -> Int -> RVar [Float]
@@ -17,22 +19,22 @@ ornsteinUhlenbeck x f number_of_steps = do
   zs <- replicateM number_of_steps (normal 0 1)
   pure $ scanl f x zs
 
-vasicekStep :: MeanReversion -> Mean -> Variance -> TimeStep -> Float -> Float -> Float
-vasicekStep theta mu sigma dt x_prev z = x_prev + drift + noise
+vasicekStep :: OrnstienUhlenbeck -> TimeStep -> Float -> Float -> Float
+vasicekStep ou dt x_prev z = x_prev + drift + noise
   where
-    drift = theta * (mu - x_prev) * dt
-    noise = sigma * sqrt dt * z
+    drift = theta ou * (mu ou - x_prev) * dt
+    noise = sigma ou * sqrt dt * z
 
 -- https://en.wikipedia.org/wiki/Vasicek_model
-vasicek :: Float -> MeanReversion -> Mean -> Variance -> TimeStep -> Int -> RVar [Float]
-vasicek r b a sigma dt = ornsteinUhlenbeck r (vasicekStep b a sigma dt)
+vasicek :: Initial -> OrnstienUhlenbeck -> TimeStep -> Int -> RVar [Float]
+vasicek r ou dt = ornsteinUhlenbeck r (vasicekStep ou dt)
 
-cirStep :: MeanReversion -> Mean -> Variance -> TimeStep -> Float -> Float -> Float
-cirStep b a sigma dt r_prev z = r_prev + drift + noise
+cirStep :: OrnstienUhlenbeck -> TimeStep -> Float -> Float -> Float
+cirStep ou dt r_prev z = r_prev + drift + noise
   where
-    drift = b * (a - r_prev) * dt
-    noise = sigma * sqrt (dt * r_prev) * z
+    drift = theta ou * (mu ou - r_prev) * dt
+    noise = sigma ou * sqrt (dt * r_prev) * z
 
--- https://en.wikipedia.org/wiki/Vasicek_model
-cir :: Float -> MeanReversion -> Mean -> Variance -> TimeStep -> Int -> RVar [Float]
-cir r b a sigma dt = ornsteinUhlenbeck r (cirStep b a sigma dt)
+-- https://en.wikipedia.org/wiki/Cox%E2%80%93Ingersoll%E2%80%93Ross_model
+cir :: Float -> OrnstienUhlenbeck -> TimeStep -> Int -> RVar [Float]
+cir r ou dt = ornsteinUhlenbeck r (cirStep ou dt)
