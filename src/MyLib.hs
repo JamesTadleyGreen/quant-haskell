@@ -1,4 +1,4 @@
-module MyLib (vasicek, cir, OrnstienUhlenbeck (..)) where
+module MyLib (vasicek, chen, cir, OrnstienUhlenbeck (..)) where
 
 import Control.Monad (replicateM)
 import Data.Random (RVar, normal)
@@ -36,5 +36,19 @@ cirStep ou dt r_prev z = r_prev + drift + noise
     noise = sigma ou * sqrt (dt * r_prev) * z
 
 -- https://en.wikipedia.org/wiki/Cox%E2%80%93Ingersoll%E2%80%93Ross_model
-cir :: Float -> OrnstienUhlenbeck -> TimeStep -> Int -> RVar [Float]
+cir :: Initial -> OrnstienUhlenbeck -> TimeStep -> Int -> RVar [Float]
 cir r ou dt = ornsteinUhlenbeck r (cirStep ou dt)
+
+chenStep :: Float -> Float -> Float -> (Float, Float, Float) -> Float
+chenStep k dt r (t, s, z) = r + drift + noise
+  where
+    drift = k * (t - r) * dt
+    noise = sqrt r * sqrt s * sqrt dt * z
+
+-- https://en.wikipedia.org/wiki/Chen_model
+chen :: Initial -> Initial -> Initial -> Float -> OrnstienUhlenbeck -> OrnstienUhlenbeck -> TimeStep -> Int -> RVar [Float]
+chen r t s k t_ou s_ou dt n = do
+  thetas <- cir t t_ou dt n
+  sigmas <- cir s s_ou dt n
+  zs <- replicateM n (normal 0 1) :: RVar [Float]
+  return $ scanl (chenStep k dt) r $ zip3 thetas sigmas zs
